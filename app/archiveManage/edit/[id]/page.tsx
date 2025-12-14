@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 // 이미지 URL 상수들
 const imgWeuiBackFilled = "https://www.figma.com/api/mcp/asset/fc046765-84dd-4c1a-8db8-431253b7db0c";
@@ -22,25 +22,42 @@ function NavBarMobile() {
         <img alt="" className="block max-w-none size-full" src={imgWeuiBackFilled} />
       </button>
       <p className="font-bold leading-[1.5] relative shrink-0 text-[15px] text-black">
-        글 관리
+        글 수정
       </p>
       <div className="h-[24px] opacity-0 shrink-0 w-[12px]" />
     </div>
   );
 }
 
-export default function CreateProjectPage() {
+type MemberType = {
+  id: string;
+  name: string;
+  nickname: string;
+  displayName: string;
+  email: string;
+};
+
+type ProjectType = {
+  id: string;
+  title: string;
+  description: string | null;
+  teamName: string | null;
+  year: number;
+  category: string | null;
+  thumbnail: string | null;
+  content: string | null;
+  isPublic: boolean;
+  tags: Array<{ tag: { name: string } }>;
+};
+
+export default function EditProjectPage() {
   const router = useRouter();
+  const params = useParams();
+  const projectId = params.id as string;
+  
+  const [isLoading, setIsLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [teamName, setTeamName] = useState('');
-  type MemberType = {
-    id: string;
-    name: string;
-    nickname: string;
-    displayName: string;
-    email: string;
-  };
-  
   const [selectedMembers, setSelectedMembers] = useState<Array<MemberType>>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [memberSearchResults, setMemberSearchResults] = useState<Array<MemberType>>([]);
@@ -50,8 +67,68 @@ export default function CreateProjectPage() {
   const [year, setYear] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null); // 기존 이미지 URL
   const [detailImages, setDetailImages] = useState<File[]>([]);
+  const [detailImageUrls, setDetailImageUrls] = useState<string[]>([]); // 기존 이미지 URLs
   const [showOnHome, setShowOnHome] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 프로젝트 데이터 로드
+  useEffect(() => {
+    const loadProject = async () => {
+      try {
+        setIsLoading(true);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          router.push('/login');
+          return;
+        }
+
+        const response = await fetch(`/api/admin/projects/${projectId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const project: ProjectType = data.project;
+          
+          setTitle(project.title || '');
+          setTeamName(project.teamName || '');
+          setYear(project.year?.toString() || '');
+          setTags(project.tags?.map((pt) => pt.tag.name) || []);
+          setCoverImageUrl(project.thumbnail);
+          setShowOnHome(!project.isPublic); // isPublic이 false면 홈에 표시
+          
+          // 기존 세부 이미지 URLs 파싱
+          if (project.content) {
+            try {
+              const urls = JSON.parse(project.content);
+              setDetailImageUrls(Array.isArray(urls) ? urls : []);
+            } catch (e) {
+              setDetailImageUrls([]);
+            }
+          }
+
+          // TODO: 팀원 정보 로드 (프로젝트에 팀원 정보가 연결되어 있다면)
+        } else {
+          alert('프로젝트를 불러올 수 없습니다.');
+          router.back();
+        }
+      } catch (error) {
+        console.error('프로젝트 로드 오류:', error);
+        alert('프로젝트 로드 중 오류가 발생했습니다.');
+        router.back();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (projectId) {
+      loadProject();
+    }
+  }, [projectId, router]);
 
   const handleTagAdd = (tag: string) => {
     if (tag.trim() && !tags.includes(tag.trim())) {
@@ -66,23 +143,23 @@ export default function CreateProjectPage() {
   const handleCoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // 파일 타입 검증
       if (!file.type.startsWith('image/')) {
         alert('이미지 파일만 업로드 가능합니다. (JPG, PNG, GIF, WEBP)');
         return;
       }
-      // 파일 크기 제한 (5MB)
       const maxSize = 5 * 1024 * 1024;
       if (file.size > maxSize) {
         alert('파일 크기는 5MB 이하여야 합니다.');
         return;
       }
       setCoverImage(file);
+      setCoverImageUrl(null); // 새 이미지 업로드 시 기존 URL 제거
     }
   };
 
   const handleRemoveCoverImage = () => {
     setCoverImage(null);
+    setCoverImageUrl(null);
   };
 
   const handleDetailImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,12 +168,10 @@ export default function CreateProjectPage() {
       const validFiles: File[] = [];
       
       files.forEach((file) => {
-        // 파일 타입 검증
         if (!file.type.startsWith('image/')) {
           alert(`${file.name}은(는) 이미지 파일이 아닙니다. (JPG, PNG, GIF, WEBP)`);
           return;
         }
-        // 파일 크기 제한 (5MB)
         const maxSize = 5 * 1024 * 1024;
         if (file.size > maxSize) {
           alert(`${file.name}은(는) 파일 크기가 5MB를 초과합니다.`);
@@ -106,26 +181,42 @@ export default function CreateProjectPage() {
       });
       
       setDetailImages([...detailImages, ...validFiles]);
-      // input 초기화 (같은 파일 다시 선택 가능하게)
       e.target.value = '';
     }
   };
 
-  const handleRemoveDetailImage = (index: number) => {
-    setDetailImages(detailImages.filter((_, i) => i !== index));
+  const handleRemoveDetailImage = (index: number, isUrl: boolean) => {
+    if (isUrl) {
+      setDetailImageUrls(detailImageUrls.filter((_, i) => i !== index));
+    } else {
+      setDetailImages(detailImages.filter((_, i) => i !== index));
+    }
   };
 
-  const handleMoveDetailImage = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === detailImages.length - 1) return;
-
-    const newImages = [...detailImages];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newImages[index], newImages[targetIndex]] = [newImages[targetIndex], newImages[index]];
-    setDetailImages(newImages);
+  const handleMoveDetailImage = (index: number, direction: 'up' | 'down', isUrl: boolean) => {
+    if (isUrl) {
+      const total = detailImageUrls.length;
+      if (direction === 'up' && index === 0) return;
+      if (direction === 'down' && index === total - 1) return;
+      
+      const newUrls = [...detailImageUrls];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      [newUrls[index], newUrls[targetIndex]] = [newUrls[targetIndex], newUrls[index]];
+      setDetailImageUrls(newUrls);
+    } else {
+      const total = detailImages.length;
+      const urlOffset = detailImageUrls.length;
+      const actualIndex = index - urlOffset;
+      
+      if (direction === 'up' && actualIndex === 0) return;
+      if (direction === 'down' && actualIndex === total - 1) return;
+      
+      const newImages = [...detailImages];
+      const targetIndex = direction === 'up' ? actualIndex - 1 : actualIndex + 1;
+      [newImages[actualIndex], newImages[targetIndex]] = [newImages[targetIndex], newImages[actualIndex]];
+      setDetailImages(newImages);
+    }
   };
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     // 필수 필드 검증
@@ -137,10 +228,6 @@ export default function CreateProjectPage() {
       alert('팀명을 입력해주세요.');
       return;
     }
-    if (selectedMembers.length === 0) {
-      alert('팀원을 최소 1명 이상 선택해주세요.');
-      return;
-    }
     if (!year.trim()) {
       alert('연도를 입력해주세요.');
       return;
@@ -149,11 +236,11 @@ export default function CreateProjectPage() {
       alert('태그를 최소 1개 이상 입력해주세요.');
       return;
     }
-    if (!coverImage) {
+    if (!coverImage && !coverImageUrl) {
       alert('표지 이미지를 업로드해주세요.');
       return;
     }
-    if (detailImages.length === 0) {
+    if (detailImages.length === 0 && detailImageUrls.length === 0) {
       alert('세부내용 이미지를 최소 1장 이상 업로드해주세요.');
       return;
     }
@@ -173,21 +260,20 @@ export default function CreateProjectPage() {
       formData.append('teamName', teamName);
       formData.append('year', year);
       formData.append('tags', JSON.stringify(tags));
-      formData.append('isPublic', String(!showOnHome)); // showOnHome이 false면 공개
-      formData.append('memberIds', JSON.stringify(selectedMembers.map(m => m.id)));
+      formData.append('isPublic', String(!showOnHome));
 
-      // 표지 이미지 추가
+      // 표지 이미지 추가 (새로운 이미지가 있는 경우만)
       if (coverImage) {
         formData.append('coverImage', coverImage);
       }
 
-      // 세부내용 이미지들 추가 (순서대로)
+      // 세부내용 이미지들 추가 (새로운 이미지만)
       detailImages.forEach((image) => {
         formData.append('detailImages', image);
       });
 
-      const response = await fetch('/api/admin/projects', {
-        method: 'POST',
+      const response = await fetch(`/api/admin/projects/${projectId}`, {
+        method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -195,15 +281,15 @@ export default function CreateProjectPage() {
       });
 
       if (response.ok) {
-        alert('프로젝트가 등록되었습니다.');
-        router.back(); // 이전 페이지로 리디렉션
+        alert('프로젝트가 수정되었습니다.');
+        router.back();
       } else {
         const errorData = await response.json();
-        alert(errorData.error || '프로젝트 등록에 실패했습니다.');
+        alert(errorData.error || '프로젝트 수정에 실패했습니다.');
       }
     } catch (error) {
-      console.error('프로젝트 등록 오류:', error);
-      alert('프로젝트 등록 중 오류가 발생했습니다.');
+      console.error('프로젝트 수정 오류:', error);
+      alert('프로젝트 수정 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -229,7 +315,6 @@ export default function CreateProjectPage() {
 
         if (response.ok) {
           const data = await response.json();
-          // 이미 선택된 멤버 제외
           const filtered = data.users.filter(
             (user: {id: string}) => !selectedMembers.some((m) => m.id === user.id)
           );
@@ -241,7 +326,7 @@ export default function CreateProjectPage() {
       }
     };
 
-    const timeoutId = setTimeout(searchUsers, 300); // 디바운스
+    const timeoutId = setTimeout(searchUsers, 300);
     return () => clearTimeout(timeoutId);
   }, [memberSearchQuery, selectedMembers]);
 
@@ -269,6 +354,16 @@ export default function CreateProjectPage() {
   const handleMemberRemove = (userId: string) => {
     setSelectedMembers(selectedMembers.filter((m) => m.id !== userId));
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-[#f8f6f4] flex items-center justify-center min-h-screen">
+        <p className="text-[#85817e] text-[13px]">로딩 중...</p>
+      </div>
+    );
+  }
+
+  const allDetailImages = [...detailImageUrls, ...detailImages.map(() => 'file')]; // URL과 파일 구분용
 
   return (
     <div className="bg-[#f8f6f4] flex flex-col items-center relative w-full min-h-screen">
@@ -330,7 +425,6 @@ export default function CreateProjectPage() {
               </p>
             </div>
             <div className="bg-white min-h-[36px] px-[12px] py-[4px] rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.05)] shrink-0 w-full relative">
-              {/* 선택된 멤버들 */}
               <div className="flex flex-wrap gap-[4px] items-center mb-[4px]">
                 {selectedMembers.map((member) => (
                   <div
@@ -347,7 +441,6 @@ export default function CreateProjectPage() {
                     </button>
                   </div>
                 ))}
-                {/* 검색 입력란 */}
                 <input
                   ref={memberInputRef}
                   type="text"
@@ -366,7 +459,6 @@ export default function CreateProjectPage() {
                 />
               </div>
               
-              {/* 검색 결과 드롭다운 */}
               {showMemberDropdown && memberSearchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-[4px] bg-white border border-[#eeebe6] rounded-[8px] shadow-lg max-h-[200px] overflow-y-auto z-50">
                   {memberSearchResults.map((user) => (
@@ -474,6 +566,12 @@ export default function CreateProjectPage() {
                     alt="Cover"
                     className="w-full h-full object-cover rounded-[10px]"
                   />
+                ) : coverImageUrl ? (
+                  <img
+                    src={coverImageUrl}
+                    alt="Cover"
+                    className="w-full h-full object-cover rounded-[10px]"
+                  />
                 ) : (
                   <div className="flex flex-col gap-[4px] items-center justify-center">
                     <div className="relative shrink-0 size-[32px]">
@@ -490,7 +588,7 @@ export default function CreateProjectPage() {
                   </div>
                 )}
               </label>
-              {coverImage && (
+              {(coverImage || coverImageUrl) && (
                 <button
                   type="button"
                   onClick={handleRemoveCoverImage}
@@ -535,19 +633,19 @@ export default function CreateProjectPage() {
                 onChange={handleDetailImageChange}
                 className="hidden"
               />
-              {detailImages.length > 0 ? (
+              {(detailImages.length > 0 || detailImageUrls.length > 0) ? (
                 <div className="flex flex-wrap gap-[8px] p-[12px] w-full min-h-[141px]">
-                  {detailImages.map((img, index) => (
-                    <div key={index} className="relative group">
+                  {/* 기존 이미지 URLs */}
+                  {detailImageUrls.map((url, index) => (
+                    <div key={`url-${index}`} className="relative group">
                       <img
-                        src={URL.createObjectURL(img)}
+                        src={url}
                         alt={`Detail ${index + 1}`}
                         className="w-[100px] h-[100px] object-cover rounded-[4px]"
                       />
-                      {/* 삭제 버튼 */}
                       <button
                         type="button"
-                        onClick={() => handleRemoveDetailImage(index)}
+                        onClick={() => handleRemoveDetailImage(index, true)}
                         className="absolute top-[4px] right-[4px] bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full p-[4px] flex items-center justify-center transition-opacity z-10"
                         aria-label="이미지 삭제"
                       >
@@ -564,13 +662,12 @@ export default function CreateProjectPage() {
                           <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                       </button>
-                      {/* 순서 변경 버튼들 */}
-                      {detailImages.length > 1 && (
+                      {(detailImageUrls.length > 1 || detailImages.length > 0) && (
                         <div className="absolute bottom-[4px] left-[4px] flex flex-col gap-[2px]">
                           {index > 0 && (
                             <button
                               type="button"
-                              onClick={() => handleMoveDetailImage(index, 'up')}
+                              onClick={() => handleMoveDetailImage(index, 'up', true)}
                               className="bg-black bg-opacity-60 hover:bg-opacity-80 rounded px-[4px] py-[2px] flex items-center justify-center transition-opacity"
                               aria-label="위로 이동"
                             >
@@ -587,10 +684,10 @@ export default function CreateProjectPage() {
                               </svg>
                             </button>
                           )}
-                          {index < detailImages.length - 1 && (
+                          {(index < detailImageUrls.length - 1 || detailImages.length > 0) && (
                             <button
                               type="button"
-                              onClick={() => handleMoveDetailImage(index, 'down')}
+                              onClick={() => handleMoveDetailImage(index, 'down', true)}
                               className="bg-black bg-opacity-60 hover:bg-opacity-80 rounded px-[4px] py-[2px] flex items-center justify-center transition-opacity"
                               aria-label="아래로 이동"
                             >
@@ -611,6 +708,82 @@ export default function CreateProjectPage() {
                       )}
                     </div>
                   ))}
+                  {/* 새로 업로드한 이미지 파일들 */}
+                  {detailImages.map((img, index) => {
+                    const actualIndex = detailImageUrls.length + index;
+                    return (
+                      <div key={`file-${index}`} className="relative group">
+                        <img
+                          src={URL.createObjectURL(img)}
+                          alt={`Detail ${actualIndex + 1}`}
+                          className="w-[100px] h-[100px] object-cover rounded-[4px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDetailImage(actualIndex, false)}
+                          className="absolute top-[4px] right-[4px] bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full p-[4px] flex items-center justify-center transition-opacity z-10"
+                          aria-label="이미지 삭제"
+                        >
+                          <svg
+                            className="w-[14px] h-[14px] text-white"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2.5"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                        {(detailImageUrls.length > 0 || detailImages.length > 1) && (
+                          <div className="absolute bottom-[4px] left-[4px] flex flex-col gap-[2px]">
+                            {(detailImageUrls.length > 0 || index > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveDetailImage(actualIndex, 'up', false)}
+                                className="bg-black bg-opacity-60 hover:bg-opacity-80 rounded px-[4px] py-[2px] flex items-center justify-center transition-opacity"
+                                aria-label="위로 이동"
+                              >
+                                <svg
+                                  className="w-[12px] h-[12px] text-white"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2.5"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <polyline points="18 15 12 9 6 15"></polyline>
+                                </svg>
+                              </button>
+                            )}
+                            {index < detailImages.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveDetailImage(actualIndex, 'down', false)}
+                                className="bg-black bg-opacity-60 hover:bg-opacity-80 rounded px-[4px] py-[2px] flex items-center justify-center transition-opacity"
+                                aria-label="아래로 이동"
+                              >
+                                <svg
+                                  className="w-[12px] h-[12px] text-white"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2.5"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   {/* 추가 이미지 업로드 버튼 */}
                   <label className="w-[100px] h-[100px] border-2 border-dashed border-[#d1d5db] rounded-[4px] flex items-center justify-center cursor-pointer hover:border-[#fd6f22] hover:bg-[#fff5f0] transition-colors">
                     <input
@@ -694,7 +867,7 @@ export default function CreateProjectPage() {
             className="bg-white flex h-[34px] items-center justify-center px-[12px] py-0 relative rounded-[12px] shrink-0 hover:opacity-80 active:opacity-70 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <p className="font-normal leading-[1.5] not-italic relative shrink-0 text-[13px] text-[#1a1918] tracking-[-0.26px]">
-              {isSubmitting ? '등록 중...' : '등록'}
+              {isSubmitting ? '수정 중...' : '수정'}
             </p>
           </button>
         </div>
@@ -702,4 +875,3 @@ export default function CreateProjectPage() {
     </div>
   );
 }
-
