@@ -34,6 +34,20 @@ function NavBarMobile() {
   );
 }
 
+type Project = {
+  id: string;
+  title: string;
+  description: string | null;
+  teamName: string | null;
+  year: number;
+  category: string | null;
+  thumbnail: string | null;
+  viewCount: number;
+  isPublic: boolean;
+  createdAt: string;
+  tags: Array<{ tag: { name: string } }>;
+};
+
 export default function ArchiveManagePage() {
   const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<'project' | 'news'>('project');
@@ -50,13 +64,18 @@ export default function ArchiveManagePage() {
   const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
   
   // 프로젝트 선택 상태 관리
-  const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalViewCount, setTotalViewCount] = useState(0);
   
-  const handleProjectToggle = (index: number) => {
+  const handleProjectToggle = (projectId: string) => {
     setSelectedProjects(prev => 
-      prev.includes(index) 
-        ? prev.filter(i => i !== index)
-        : [...prev, index]
+      prev.includes(projectId) 
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
     );
   };
   
@@ -71,6 +90,187 @@ export default function ArchiveManagePage() {
   const sortRef = useRef<HTMLDivElement>(null);
   const visibilityRef = useRef<HTMLDivElement>(null);
   
+  // 프로젝트 목록 로드
+  useEffect(() => {
+    if (selectedTab === 'project') {
+      loadProjects();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTab, selectedYear, selectedCategory, selectedSort, selectedVisibility]);
+
+  // 검색 debounce
+  useEffect(() => {
+    if (selectedTab === 'project') {
+      const timer = setTimeout(() => {
+        loadProjects();
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const params = new URLSearchParams();
+      
+      // 연도 필터
+      if (selectedYear !== '전체 연도') {
+        params.append('year', selectedYear);
+      }
+      
+      // 카테고리 필터
+      if (selectedCategory !== '전체 카테고리') {
+        const categoryMap: Record<string, string> = {
+          '겨울 공모전': '겨울공모전',
+          '여름 공모전': '여름공모전',
+          '캡스톤 디자인': '캡스톤디자인',
+        };
+        params.append('category', categoryMap[selectedCategory] || selectedCategory);
+      }
+      
+      // 공개/비공개 필터
+      if (selectedVisibility === '공개') {
+        params.append('isPublic', 'true');
+      } else if (selectedVisibility === '비공개') {
+        params.append('isPublic', 'false');
+      }
+
+      params.append('page', '1');
+      params.append('limit', '100');
+
+      const apiUrl = `/api/admin/projects?${params.toString()}`;
+      console.log('API 요청 URL:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store', // 캐시 무시
+        next: { revalidate: 0 }, // Next.js 캐시 무시
+      });
+      
+      console.log('API 응답 상태:', response.status, response.statusText);
+
+      if (response.ok) {
+        const data = await response.json();
+        let filteredProjects = data.projects || [];
+
+        // 디버깅: API 응답 확인
+        console.log('API 응답 데이터:', {
+          projectsCount: filteredProjects.length,
+          projects: filteredProjects.map((p: Project) => ({
+            id: p.id,
+            title: p.title,
+            teamName: p.teamName,
+            year: p.year,
+            createdAt: p.createdAt,
+          })),
+          rawData: data,
+        });
+
+        // 검색어 필터링 (팀명, 제목으로 검색)
+        if (searchQuery.trim()) {
+          const query = searchQuery.toLowerCase();
+          filteredProjects = filteredProjects.filter((project: Project) => {
+            const teamName = (project.teamName || '').toLowerCase();
+            const title = (project.title || '').toLowerCase();
+            return teamName.includes(query) || title.includes(query);
+          });
+        }
+
+        // 정렬
+        if (selectedSort === '조회순') {
+          filteredProjects.sort((a: Project, b: Project) => b.viewCount - a.viewCount);
+        } else {
+          // 최신순은 이미 API에서 정렬됨
+        }
+
+        setProjects(filteredProjects);
+        
+        // 통계 계산
+        const total = filteredProjects.length;
+        const totalViews = filteredProjects.reduce((sum: number, p: Project) => sum + (p.viewCount || 0), 0);
+        setTotalCount(total);
+        setTotalViewCount(totalViews);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('프로젝트 목록 로드 실패:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        });
+        // API 실패 시 빈 배열로 설정하여 더미데이터가 보이지 않도록 함
+        setProjects([]);
+        setTotalCount(0);
+        setTotalViewCount(0);
+      }
+    } catch (error) {
+      console.error('프로젝트 목록 로드 오류:', error);
+      // 에러 발생 시 빈 배열로 설정
+      setProjects([]);
+      setTotalCount(0);
+      setTotalViewCount(0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedProjects.length === 0) {
+      return;
+    }
+
+    if (!confirm(`선택한 ${selectedProjects.length}개의 프로젝트를 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    try {
+      // 각 프로젝트를 순차적으로 삭제
+      const deletePromises = selectedProjects.map((projectId) =>
+        fetch(`/api/admin/projects/${projectId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+      );
+
+      const results = await Promise.allSettled(deletePromises);
+      
+      // 성공/실패 확인
+      const successful = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
+      const failed = results.length - successful;
+
+      if (failed === 0) {
+        alert(`${successful}개의 프로젝트가 삭제되었습니다.`);
+        setSelectedProjects([]); // 선택 상태 초기화
+        loadProjects(); // 목록 새로고침
+      } else {
+        alert(`${successful}개 성공, ${failed}개 실패했습니다.`);
+        // 일부 성공했더라도 목록 새로고침
+        setSelectedProjects([]);
+        loadProjects();
+      }
+    } catch (error) {
+      console.error('프로젝트 삭제 오류:', error);
+      alert('프로젝트 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -93,6 +293,28 @@ export default function ArchiveManagePage() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}.${month}.${day} ${hours}:${minutes}`;
+  };
+
+  const getCategoryBadgeStyle = (category: string | null) => {
+    if (!category) return { bg: 'bg-[#e8f4ff]', text: 'text-[#06c]' };
+    
+    const categoryMap: Record<string, { bg: string; text: string }> = {
+      '겨울공모전': { bg: 'bg-[#e8f4ff]', text: 'text-[#06c]' },
+      '여름공모전': { bg: 'bg-[#fff5e6]', text: 'text-[#ff8c00]' },
+      '캡스톤디자인': { bg: 'bg-[#f3e8ff]', text: 'text-[#8b5cf6]' },
+    };
+    
+    return categoryMap[category] || { bg: 'bg-[#e8f4ff]', text: 'text-[#06c]' };
+  };
 
   return (
     <div className="bg-[#f8f6f4] flex flex-col items-start relative w-full min-h-screen">
@@ -149,7 +371,7 @@ export default function ArchiveManagePage() {
               {selectedTab === 'news' ? '전체 뉴스' : '전체 프로젝트'}
             </p>
             <p className="font-normal leading-[28px] relative text-[#1a1918] text-[20px]">
-              {selectedTab === 'news' ? '7' : '6'}
+              {selectedTab === 'project' ? totalCount : '0'}
             </p>
           </div>
 
@@ -164,7 +386,7 @@ export default function ArchiveManagePage() {
               총 조회수
             </p>
             <p className="font-normal leading-[28px] relative text-[#1a1918] text-[20px]">
-              {selectedTab === 'news' ? '1839' : '2169'}
+              {selectedTab === 'project' ? totalViewCount.toLocaleString() : '0'}
             </p>
           </div>
         </div>
@@ -173,11 +395,13 @@ export default function ArchiveManagePage() {
         <div className="flex flex-col gap-[8px] items-start relative shrink-0 w-full">
           {/* 검색 바 */}
           <div className="bg-white border border-[rgba(0,0,0,0)] border-solid h-[36px] relative rounded-[8px] shrink-0 w-full">
-            <div className="flex items-center overflow-clip px-[12px] py-[4px] relative size-full">
-              <p className="font-normal leading-[normal] relative shrink-0 text-[#717182] text-[11px] tracking-[-0.3125px]">
-                팀명, 제목으로 검색...
-              </p>
-            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="팀명, 제목으로 검색..."
+              className="w-full h-full px-[12px] py-[4px] bg-transparent border-0 text-[11px] text-[#1a1918] placeholder:text-[#717182] focus:outline-none"
+            />
           </div>
 
           {/* 필터 드롭다운들 */}
@@ -329,455 +553,101 @@ export default function ArchiveManagePage() {
         {/* 프로젝트 리스트 */}
         {selectedTab === 'project' && (
           <div className="flex flex-col gap-[12px] items-start relative shrink-0 w-full">
-            {/* 프로젝트 카드 1 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(0)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(0) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(0) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
+            {isLoading ? (
+              <div className="flex items-center justify-center w-full py-[40px]">
+                <p className="font-normal text-[13px] text-[#85817e]">로딩 중...</p>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="flex items-center justify-center w-full py-[40px]">
+                <p className="font-normal text-[13px] text-[#85817e]">프로젝트가 없습니다.</p>
+              </div>
+            ) : (
+              projects.map((project) => {
+                const badgeStyle = getCategoryBadgeStyle(project.category);
+                const firstTag = project.tags.length > 0 ? project.tags[0].tag.name : null;
+                
+                return (
+                  <div key={project.id} className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
+                    <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
+                      <button
+                        onClick={() => handleProjectToggle(project.id)}
+                        className="relative shrink-0 size-[24px] cursor-pointer"
+                      >
+                        <div className="absolute contents left-[2px] top-[2px]">
+                          <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(project.id) ? 'bg-[#2a2a2e]' : ''}`} />
+                          {selectedProjects.includes(project.id) && (
+                            <div className="absolute flex inset-0 items-center justify-center">
+                              <svg
+                                className="w-3 h-3 text-white"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2.5"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                      <div className="h-[18px] relative shrink-0 w-[35px]">
+                        <div className={`absolute flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px] ${project.isPublic ? 'bg-[#fd6f22]' : 'bg-[#afafaf]'}`}>
+                          <div className="relative shrink-0 size-[14.36px]">
+                            <img alt="" className="block max-w-none size-full" src={img} />
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#fd6f22] flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
                     </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  여명
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.12.17 13:13
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  슈링클스 키링 DIY 키트
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#e8f4ff] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#06c] text-[10px] tracking-[0.1172px]">
-                      겨울공모전
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2025
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 304
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
-
-            {/* 프로젝트 카드 2 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(1)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(1) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(1) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
+                    <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
+                      <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
+                        {project.teamName || '-'}
+                      </p>
+                      <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
+                        {formatDate(project.createdAt)}
+                      </p>
+                    </div>
+                    <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
+                      <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px] line-clamp-1">
+                        {project.title}
+                      </p>
+                    </div>
+                    <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
+                      <div className="flex gap-[8px] items-center relative shrink-0">
+                        {firstTag && (
+                          <div className={`${badgeStyle.bg} border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0`}>
+                            <p className={`font-medium leading-[15px] relative shrink-0 ${badgeStyle.text} text-[10px] tracking-[0.1172px]`}>
+                              {firstTag}
+                            </p>
+                          </div>
+                        )}
+                        <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
+                          {project.year}
+                        </p>
+                        <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
+                          •
+                        </p>
+                        <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
+                          조회수 {project.viewCount}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#fd6f22] flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
                     </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  유랑
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.12.15 10:20
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  웹 연동형 NFC 키링
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#e8f4ff] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#06c] text-[10px] tracking-[0.1172px]">
-                      겨울공모전
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2025
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 456
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
-
-            {/* 프로젝트 카드 3 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(2)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(2) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(2) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
+                    <button
+                      onClick={() => router.push(`/archiveManage/edit/${project.id}`)}
+                      className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px] hover:opacity-80 transition-opacity"
+                    >
+                      <div className="relative shrink-0 size-[12px] mr-[4px]">
+                        <img alt="" className="block max-w-none size-full" src={imgIcon1} />
                       </div>
-                    )}
+                      <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
+                        수정하기
+                      </p>
+                    </button>
                   </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#fd6f22] flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  MUA
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.12.10 14:30
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  불교 철학을 담은 어패럴 굿즈
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#fff5e6] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#ff8c00] text-[10px] tracking-[0.1172px]">
-                      여름공모전
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2025
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 230
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
-
-            {/* 프로젝트 카드 4 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(3)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(3) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(3) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#fd6f22] flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  HUSH
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.11.10 10:30
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  친환경 재사용 컵홀더〈HUSH eco cup holder〉
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#f3e8ff] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#8b5cf6] text-[10px] tracking-[0.1172px]">
-                      캡스톤디자인
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2024
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 389
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
-
-            {/* 프로젝트 카드 5 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(4)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(4) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(4) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#afafaf] flex h-[18px] items-center left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  KITTY
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.11.05 16:45
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  아코 키링
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#fff5e6] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#ff8c00] text-[10px] tracking-[0.1172px]">
-                      여름공모전
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2024
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 278
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
-
-            {/* 프로젝트 카드 6 */}
-            <div className="bg-white h-[179px] flex flex-col relative rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] shrink-0 w-full">
-              <div className="flex items-start justify-between px-[16px] pt-[16px] relative w-full">
-                <button
-                  onClick={() => handleProjectToggle(5)}
-                  className="relative shrink-0 size-[24px] cursor-pointer"
-                >
-                  <div className="absolute contents left-[2px] top-[2px]">
-                    <div className={`absolute border-[1.5px] border-[#2a2a2e] border-solid left-[2px] rounded-[5px] size-[20px] top-[2px] ${selectedProjects.includes(5) ? 'bg-[#2a2a2e]' : ''}`} />
-                    {selectedProjects.includes(5) && (
-                      <div className="absolute flex inset-0 items-center justify-center">
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </button>
-                <div className="h-[18px] relative shrink-0 w-[35px]">
-                  <div className="absolute bg-[#fd6f22] flex h-[18px] items-center justify-end left-0 p-[2px] rounded-[251.6px] top-0 w-[35px]">
-                    <div className="relative shrink-0 size-[14.36px]">
-                      <img alt="" className="block max-w-none size-full" src={img} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-[16px] pt-[14px] relative w-full">
-                <p className="font-normal leading-[16px] relative shrink-0 text-[#85817e] text-[12px]">
-                  KITTY
-                </p>
-                <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                  2025.10.28 09:15
-                </p>
-              </div>
-              <div className="h-[20.62px] px-[16px] pt-[8px] relative shrink-0 w-full">
-                <p className="font-normal leading-[20.625px] relative text-[#1a1918] text-[15px] tracking-[-0.2344px]">
-                  동국 USB
-                </p>
-              </div>
-              <div className="h-[20.1px] px-[16px] pt-[12px] relative shrink-0 w-full">
-                <div className="flex gap-[8px] items-center relative shrink-0">
-                  <div className="bg-[#e8f4ff] border border-[rgba(0,0,0,0)] border-solid flex items-center justify-center overflow-clip px-[8.56px] py-[2.56px] rounded-[8px] shrink-0">
-                    <p className="font-medium leading-[15px] relative shrink-0 text-[#06c] text-[10px] tracking-[0.1172px]">
-                      겨울공모전
-                    </p>
-                  </div>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    2024
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    •
-                  </p>
-                  <p className="font-normal leading-[15px] relative shrink-0 text-[#85817e] text-[10px] tracking-[0.1172px]">
-                    조회수 512
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#e8e4df] border-solid h-[32px] px-[16px] flex items-center justify-center relative rounded-[8px] shrink-0 w-[90%] mx-auto mt-auto mb-[16px]">
-                <div className="relative shrink-0 size-[12px] mr-[4px]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-                <p className="font-medium leading-[16px] relative shrink-0 text-[#85817e] text-[12px] text-center">
-                  수정하기
-                </p>
-              </div>
-            </div>
+                );
+              })
+            )}
           </div>
         )}
 
@@ -805,7 +675,10 @@ export default function ArchiveManagePage() {
                 비공개
               </p>
             </button>
-            <button className="bg-[#d4183d] h-[32px] px-[12px] py-0 rounded-[8px] shrink-0 hover:opacity-80 transition-opacity relative">
+            <button 
+              onClick={handleBatchDelete}
+              className="bg-[#d4183d] h-[32px] px-[12px] py-0 rounded-[8px] shrink-0 hover:opacity-80 transition-opacity relative"
+            >
               <div className="absolute left-[10px] size-[12px] top-[10px]">
                 <img alt="" className="block max-w-none size-full" src={imgIcon3} />
               </div>

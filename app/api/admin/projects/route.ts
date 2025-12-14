@@ -4,6 +4,10 @@ import { verifyToken, isAdmin } from '@/lib/auth';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
+// 캐싱 방지
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET /api/admin/projects - 프로젝트 목록 (관리자용)
 export async function GET(request: NextRequest) {
   try {
@@ -82,6 +86,19 @@ export async function GET(request: NextRequest) {
 
     const total = await prisma.project.count({ where });
 
+    // 디버깅: 실제 DB에서 가져온 데이터 확인
+    console.log('DB에서 가져온 프로젝트:', {
+      count: projects.length,
+      projects: projects.map((p) => ({
+        id: p.id,
+        title: p.title,
+        teamName: p.teamName,
+        year: p.year,
+        createdAt: p.createdAt,
+      })),
+      total,
+    });
+
     return NextResponse.json(
       {
         projects,
@@ -92,7 +109,14 @@ export async function GET(request: NextRequest) {
           totalPages: Math.ceil(total / limit),
         },
       },
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     );
   } catch (error) {
     console.error('프로젝트 목록 조회 오류:', error);
