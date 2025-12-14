@@ -93,10 +93,10 @@ function ArchiveContent() {
         setProjects(data.projects || []);
         
         // 연도 및 태그 목록 추출
-        const years = [...new Set(data.projects.map((p: Project) => p.year))].sort((a, b) => b - a);
+        const years = [...new Set(data.projects.map((p: Project) => p.year))].sort((a: number, b: number) => b - a);
         const tags = [...new Set(data.projects.flatMap((p: Project) => p.tags || []))];
-        setAvailableYears(years as number[]);
-        setAvailableTags(tags as string[]);
+        setAvailableYears(years);
+        setAvailableTags(tags);
       } else {
         console.error('프로젝트 목록 로드 실패');
       }
