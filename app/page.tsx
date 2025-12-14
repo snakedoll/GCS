@@ -15,28 +15,37 @@ const img14 = "https://www.figma.com/api/mcp/asset/6f57b013-c8c4-4f5d-9c7f-fab2a
 
 export default function Home() {
   return (
-    <div className="bg-white min-h-[calc(100vh-8rem)] w-full overflow-x-hidden">
-      {/* 주황색 배경 영역 (Desktop) */}
-      <div className="h-[243.75px] overflow-hidden relative shrink-0 w-full max-w-full">
+    <div className="bg-[#f8f6f4] min-h-screen w-full overflow-x-hidden">
+      {/* 주황색 배경 영역 */}
+      <div className="h-[243.75px] overflow-hidden relative shrink-0 w-full">
+        {/* 배경 이미지 */}
         <div className="absolute h-[243.75px] left-0 top-0 w-full">
           <img alt="" className="block max-w-none size-full object-cover" src={imgRectangle2823} />
         </div>
-        <div className="absolute h-[392.578px] left-[-82.62px] top-[-29px] w-[467.285px] hidden sm:block">
+        
+        {/* 장식 요소 1 - 큰 원형 */}
+        <div className="absolute h-[392.578px] left-[-82.62px] top-[-29px] w-[467.285px]">
           <div className="absolute inset-[-22.39%_-18.81%]">
             <img alt="" className="block max-w-none size-full" src={imgEllipse5500} />
           </div>
         </div>
-        <div className="absolute flex h-[212.668px] items-center justify-center left-[-35.16px] top-[54.23px] w-[427.441px] hidden sm:block">
+        
+        {/* 장식 요소 2 - 벡터 1 */}
+        <div className="absolute flex h-[212.668px] items-center justify-center left-[-35.16px] top-[54.23px] w-[427.441px]">
           <div className="flex-none rotate-[180deg] scale-y-[-100%]">
             <div className="h-[212.668px] relative w-[427.441px]">
               <img alt="" className="block max-w-none size-full" src={imgVector833} />
             </div>
           </div>
         </div>
-        <div className="absolute h-[181.574px] left-[-79.1px] top-[149.71px] w-[427.502px] hidden sm:block">
+        
+        {/* 장식 요소 3 - 벡터 2 */}
+        <div className="absolute h-[181.574px] left-[-79.1px] top-[149.71px] w-[427.502px]">
           <img alt="" className="block max-w-none size-full" src={imgVector832} />
         </div>
-        <div className="absolute flex items-center justify-center left-[calc(50%-158.78px)] size-[304.117px] top-[calc(50%+98.74px)] translate-x-[-50%] translate-y-[-50%] hidden sm:block">
+        
+        {/* 장식 요소 4 - 원형 1 */}
+        <div className="absolute flex items-center justify-center left-[calc(50%-158.78px)] size-[304.117px] top-[calc(50%+98.74px)] translate-x-[-50%] translate-y-[-50%]">
           <div className="flex-none rotate-[131.046deg]">
             <div className="relative size-[215.556px]">
               <div className="absolute inset-[-23.11%_-20.39%_-17.67%_-20.39%]">
@@ -45,7 +54,9 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <div className="absolute flex items-center justify-center left-[calc(50%+146.99px)] size-[197.888px] top-[-51.56px] translate-x-[-50%] hidden sm:block">
+        
+        {/* 장식 요소 5 - 원형 2 */}
+        <div className="absolute flex items-center justify-center left-[calc(50%+146.99px)] size-[197.888px] top-[-51.56px] translate-x-[-50%]">
           <div className="flex-none rotate-[131.046deg]">
             <div className="relative size-[140.262px]">
               <div className="absolute inset-[-6.27%_-18.8%_-14.62%_-2.09%]">
@@ -54,7 +65,9 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <div className="absolute flex flex-col items-center left-1/2 top-[calc(50%-0.15px)] translate-x-[-50%] translate-y-[-50%] w-full max-w-[343px] px-4">
+        
+        {/* 중앙 로고 */}
+        <div className="absolute flex flex-col items-center left-1/2 top-[calc(50%-0.15px)] translate-x-[-50%] translate-y-[-50%] w-[343px]">
           <div className="h-[52.441px] relative shrink-0 w-[148.242px]">
             <div className="absolute inset-[1.48%_82.19%_0_0]">
               <div className="absolute inset-0">

@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 // 이미지 URL 상수들
@@ -19,6 +20,40 @@ const img6 = "https://www.figma.com/api/mcp/asset/29e606d0-1ead-404b-9c20-d4a28e
 
 export default function CheckIDPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState<string | null>(null);
+
+  // 이메일 마스킹 함수
+  const maskEmail = (email: string): string => {
+    const emailParts = email.split('@');
+    if (emailParts.length !== 2) return email;
+    
+    const localPart = emailParts[0];
+    const domain = emailParts[1];
+    
+    // 이미 마스킹되어 있는지 확인
+    if (localPart.includes('***')) {
+      return email;
+    }
+    
+    // 앞 2자리만 보여주고 나머지는 마스킹
+    if (localPart.length <= 2) {
+      return `${localPart}***@${domain}`;
+    }
+    return `${localPart.substring(0, 2)}***@${domain}`;
+  };
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      // URL에서 받은 이메일을 마스킹 처리
+      const maskedEmail = maskEmail(decodeURIComponent(emailParam));
+      setEmail(maskedEmail);
+    } else {
+      // 이메일이 없으면 findID 페이지로 리다이렉트
+      router.push('/findID');
+    }
+  }, [searchParams, router]);
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden flex flex-col">
@@ -87,7 +122,11 @@ export default function CheckIDPage() {
         </button>
 
         {/* 로고 */}
-        <div className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px]">
+        <button
+          onClick={() => router.push('/')}
+          className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px] cursor-pointer hover:opacity-80 transition-opacity z-10"
+          aria-label="홈으로 이동"
+        >
           <div className="absolute inset-[1.48%_82.19%_0_0]">
             <div className="absolute inset-0">
               <img alt="" className="block max-w-none size-full" src={img2} />
@@ -111,7 +150,7 @@ export default function CheckIDPage() {
               <img alt="" className="block max-w-none size-full" src={img6} />
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 아이디 확인 폼 카드 */}
@@ -136,8 +175,13 @@ export default function CheckIDPage() {
                       </p>
                     </div>
                     <div className="bg-[#eeebe6] border border-[#5f5a58] border-solid flex h-[48px] items-center justify-between p-[12px] relative rounded-[12px] shrink-0 w-full">
-                      {/* 백엔드에서 아이디 데이터를 가져와서 표시할 영역 */}
-                      <div className="flex-1" />
+                      {email ? (
+                        <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#5f5a58] tracking-[-0.26px] flex-1">
+                          {email}
+                        </p>
+                      ) : (
+                        <div className="flex-1" />
+                      )}
                       <div className="flex items-center relative shrink-0 w-[24px]">
                         <div className="opacity-0 overflow-clip relative shrink-0 size-[24px]">
                           <div className="absolute inset-[8.33%]">
@@ -154,14 +198,17 @@ export default function CheckIDPage() {
             </div>
             <div className="flex flex-col items-center gap-[84px] relative shrink-0 w-full">
               <div className="flex flex-col items-center px-[8px] py-0 relative shrink-0 w-full">
-                <button className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity">
+                <button 
+                  onClick={() => router.push('/login')}
+                  className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity"
+                >
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[15px] text-[#f8f6f4]">
                     로그인 하러가기
                   </p>
                 </button>
               </div>
               <div className="flex h-[19.44px] items-start justify-center relative shrink-0">
-                <Link href="/find-password" className="flex h-full items-start justify-center relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
+                <Link href="/findPassword" className="flex h-full items-start justify-center relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px]">
                     비밀번호 찾기
                   </p>

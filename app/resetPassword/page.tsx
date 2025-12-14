@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // 이미지 URL 상수들
 const imgVector827 = "https://www.figma.com/api/mcp/asset/bc8152b2-f82a-476a-8b4f-0fff6612541e";
@@ -18,10 +18,73 @@ const img5 = "https://www.figma.com/api/mcp/asset/29e606d0-1ead-404b-9c20-d4a28e
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // 비밀번호 유효성 검사
+  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+  const isPasswordValid = newPassword.length > 0 && passwordRegex.test(newPassword);
+  const isPasswordMatch = confirmPassword.length > 0 && newPassword === confirmPassword;
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchParams]);
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError('이메일이 필요합니다.');
+      return;
+    }
+
+    if (!newPassword.trim() || !confirmPassword.trim()) {
+      setError('비밀번호를 입력해주세요.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    // 비밀번호 검증 (8자 이상 영문, 숫자 조합)
+    if (!passwordRegex.test(newPassword)) {
+      setError('비밀번호는 8자 이상 영문, 숫자 조합이어야 합니다.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('비밀번호가 재설정되었습니다.');
+        router.push('/login');
+      } else {
+        setError(data.error || '비밀번호 재설정에 실패했습니다.');
+      }
+    } catch (error) {
+      setError('비밀번호 재설정 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden flex flex-col">
@@ -147,8 +210,12 @@ export default function ResetPasswordPage() {
                         placeholder="8자 이상 영문, 숫자 조합"
                         className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                       />
-                      <div className="flex items-center justify-center relative shrink-0 w-[35px]">
-                        {/* 백엔드에서 비밀번호 유효성 검사 결과를 표시할 영역 */}
+                      <div className="flex items-center justify-center relative shrink-0 w-[50px]">
+                        <p className={`font-normal leading-[1.5] text-[13px] tracking-[-0.26px] whitespace-nowrap ${
+                          isPasswordValid ? 'text-green-600' : 'text-[#fd6f22]'
+                        }`}>
+                          {isPasswordValid ? '가능' : '불가능'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -177,8 +244,12 @@ export default function ResetPasswordPage() {
                         placeholder="비밀번호를 다시 입력하세요"
                         className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                       />
-                      <div className="flex items-center justify-center relative shrink-0 w-[35px]">
-                        {/* 백엔드에서 비밀번호 일치 여부를 표시할 영역 */}
+                      <div className="flex items-center justify-center relative shrink-0 w-[50px]">
+                        <p className={`font-normal leading-[1.5] text-[13px] tracking-[-0.26px] whitespace-nowrap ${
+                          isPasswordMatch ? 'text-green-600' : 'text-[#fd6f22]'
+                        }`}>
+                          {isPasswordMatch ? '일치' : '불일치'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -192,16 +263,25 @@ export default function ResetPasswordPage() {
 
           {/* 버튼 및 링크 */}
           <div className="flex flex-col gap-[32px] items-center px-[8px] py-0 relative shrink-0 w-full">
-            <button className="bg-[#c9c1b7] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity">
+            {error && (
+              <div className="w-full p-3 bg-red-50 border border-red-200 rounded-[12px]">
+                <p className="text-[13px] text-red-600">{error}</p>
+              </div>
+            )}
+            <button 
+              onClick={handleResetPassword}
+              disabled={isLoading || !newPassword.trim() || !confirmPassword.trim()}
+              className={`${newPassword.trim() && confirmPassword.trim() && newPassword === confirmPassword ? 'bg-[#443e3c]' : 'bg-[#c9c1b7]'} cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
               <p className="font-normal leading-[1.5] relative shrink-0 text-[15px] text-[#f8f6f4]">
-                확인
+                {isLoading ? '처리 중...' : '확인'}
               </p>
             </button>
             <div className="flex gap-[4px] items-start justify-center leading-[1.5] relative shrink-0 text-[13px] tracking-[-0.26px] w-full">
               <p className="font-normal relative shrink-0 text-[#85817e]">
                 로그인 페이지로 돌아갈까요?
               </p>
-              <Link href="/Login" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
+              <Link href="/login" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
                 로그인
               </Link>
             </div>

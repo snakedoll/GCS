@@ -13,22 +13,25 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "@prisma/client": "^5.19.1",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
     "next": "^14.2.5",
-    "@prisma/client": "^5.19.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.5.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.9",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.5",
-    "prisma": "^5.19.1"
+    "postcss": "^8.4.41",
+    "prisma": "^5.19.1",
+    "tailwindcss": "^3.4.9",
+    "typescript": "^5.5.4"
   }
 }
-

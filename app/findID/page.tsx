@@ -22,6 +22,55 @@ export default function FindIDPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // 전화번호 포맷팅 함수
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/[^\d]/g, '');
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setPhone(formatted);
+  };
+
+  const handleFindID = async () => {
+    if (!name.trim() || !phone.trim()) {
+      setError('이름과 전화번호를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/find-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name, 
+          phone: phone.replace(/-/g, '') // 하이픈 제거
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.email) {
+        // /checkID 페이지로 이동하면서 마스킹된 이메일 전달
+        router.push(`/checkID?email=${encodeURIComponent(data.email)}`);
+      } else {
+        setError(data.error || '일치하는 계정을 찾을 수 없습니다.');
+      }
+    } catch (error) {
+      setError('아이디 찾기 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden flex flex-col">
@@ -90,7 +139,11 @@ export default function FindIDPage() {
         </button>
 
         {/* 로고 */}
-        <div className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px]">
+        <button
+          onClick={() => router.push('/')}
+          className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px] cursor-pointer hover:opacity-80 transition-opacity z-10"
+          aria-label="홈으로 이동"
+        >
           <div className="absolute inset-[1.48%_82.19%_0_0]">
             <div className="absolute inset-0">
               <img alt="" className="block max-w-none size-full" src={img2} />
@@ -114,7 +167,7 @@ export default function FindIDPage() {
               <img alt="" className="block max-w-none size-full" src={img6} />
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 아이디 찾기 폼 카드 */}
@@ -143,8 +196,7 @@ export default function FindIDPage() {
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="김봉구"
-                      className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
+                      className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#5f5a58] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                     />
                     <div className="flex items-center relative shrink-0 w-[24px]">
                       <div className="opacity-0 overflow-clip relative shrink-0 size-[24px]">
@@ -171,9 +223,8 @@ export default function FindIDPage() {
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="010-1234-5678"
-                      className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
+                      onChange={handlePhoneChange}
+                      className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#5f5a58] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                     />
                     <div className="flex items-center shrink-0 w-[24px]" />
                   </div>
@@ -184,9 +235,18 @@ export default function FindIDPage() {
             {/* 버튼 및 링크 */}
             <div className="flex flex-col items-center relative shrink-0 w-full">
               <div className="flex flex-col gap-[32px] items-center px-[8px] py-0 relative shrink-0 w-full">
-                <button className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity">
+                {error && (
+                  <div className="w-full p-3 bg-red-50 border border-red-200 rounded-[12px]">
+                    <p className="text-[13px] text-red-600">{error}</p>
+                  </div>
+                )}
+                <button 
+                  onClick={handleFindID}
+                  disabled={isLoading}
+                  className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+                >
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[15px] text-[#f8f6f4]">
-                    아이디 찾기
+                    {isLoading ? '찾는 중...' : '아이디 찾기'}
                   </p>
                 </button>
                 <div className="flex flex-col gap-[36px] items-center relative shrink-0 w-full">
@@ -194,11 +254,11 @@ export default function FindIDPage() {
                     <p className="font-normal relative shrink-0 text-[#85817e]">
                       아직 계정이 없으신가요?
                     </p>
-                    <Link href="/signup" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
+                    <Link href="/register" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
                       회원가입
                     </Link>
                   </div>
-                  <Link href="/find-password" className="flex items-center justify-center relative shrink-0 hover:opacity-80 transition-opacity">
+                  <Link href="/findPassword" className="flex items-center justify-center relative shrink-0 hover:opacity-80 transition-opacity">
                     <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px]">
                       비밀번호 찾기
                     </p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -21,6 +21,115 @@ export default function FindPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState(''); // 이메일 필드 관련 에러
+  const [emailSuccess, setEmailSuccess] = useState(''); // 이메일 전송 성공 메시지
+  const [verificationError, setVerificationError] = useState(''); // 인증번호 필드 관련 에러
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); // 남은 시간 (초)
+
+  const handleSendVerification = async () => {
+    if (!email.trim() || !email.includes('@')) {
+      setEmailError('올바른 이메일을 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setEmailError('');
+    setEmailSuccess('');
+
+    try {
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, type: 'reset-password' }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setVerificationSent(true);
+        setError('');
+        setEmailError('');
+        setEmailSuccess('인증번호가 전송되었습니다.');
+        setTimeLeft(300); // 5분 = 300초
+      } else {
+        // 404 에러인 경우 (등록되지 않은 이메일)
+        if (response.status === 404) {
+          setEmailError('가입된 이메일이 없습니다.');
+        } else {
+          setEmailError(data.error || '인증번호 전송에 실패했습니다.');
+        }
+      }
+    } catch (error) {
+      setEmailError('인증번호 전송 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!verificationCode.trim()) {
+      setVerificationError('인증번호를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setVerificationError('');
+
+    try {
+      const response = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: verificationCode, type: 'reset-password' }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.verified) {
+        setIsVerified(true);
+        setError('');
+        setVerificationError('');
+        alert('인증이 완료되었습니다. 비밀번호 재설정 페이지로 이동합니다.');
+        router.push(`/resetPassword?email=${encodeURIComponent(email)}`);
+      } else {
+        setVerificationError(data.error || '인증번호가 올바르지 않습니다.');
+      }
+    } catch (error) {
+      setVerificationError('인증 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 타이머 효과
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  // 시간 포맷팅 (MM:SS)
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  };
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden flex flex-col">
@@ -89,7 +198,11 @@ export default function FindPasswordPage() {
         </button>
 
         {/* 로고 */}
-        <div className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px]">
+        <button
+          onClick={() => router.push('/')}
+          className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px] cursor-pointer hover:opacity-80 transition-opacity z-10"
+          aria-label="홈으로 이동"
+        >
           <div className="absolute inset-[1.48%_82.19%_0_0]">
             <div className="absolute inset-0">
               <img alt="" className="block max-w-none size-full" src={img1} />
@@ -113,7 +226,7 @@ export default function FindPasswordPage() {
               <img alt="" className="block max-w-none size-full" src={img5} />
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 비밀번호 찾기 폼 카드 */}
@@ -142,18 +255,36 @@ export default function FindPasswordPage() {
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setEmailError(''); // 입력 시 에러 메시지 초기화
+                          setEmailSuccess(''); // 입력 시 성공 메시지 초기화
+                        }}
                         placeholder="example@email.com"
                         className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                       />
                       <div className="flex items-center justify-center shrink-0 w-[35px]" />
                     </div>
-                    <button className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[12px] relative rounded-[12px] self-stretch shrink-0 w-[70px] hover:opacity-90 transition-opacity">
+                    <button 
+                      onClick={handleSendVerification}
+                      disabled={!email.includes('@') || isLoading || verificationSent}
+                      className={`${email.includes('@') && !verificationSent ? 'bg-[#443e3c]' : 'bg-[#c9c1b7]'} cursor-pointer flex items-center justify-center p-[12px] relative rounded-[12px] self-stretch shrink-0 w-[70px] hover:opacity-90 transition-opacity ${!email.includes('@') || verificationSent ? 'cursor-not-allowed opacity-60' : ''}`}
+                    >
                       <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#f8f6f4] tracking-[-0.26px]">
-                        전송
+                        {verificationSent ? '전송 완료' : '전송'}
                       </p>
                     </button>
                   </div>
+                  {emailError && (
+                    <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#fd6f22] tracking-[-0.26px]">
+                      {emailError}
+                    </p>
+                  )}
+                  {emailSuccess && (
+                    <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#fd6f22] tracking-[-0.26px]">
+                      {emailSuccess}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -172,15 +303,31 @@ export default function FindPasswordPage() {
                       <input
                         type="text"
                         value={verificationCode}
-                        onChange={(e) => setVerificationCode(e.target.value)}
+                        onChange={(e) => {
+                          setVerificationCode(e.target.value);
+                          setVerificationError(''); // 입력 시 에러 메시지 초기화
+                        }}
                         placeholder="인증번호를 입력하세요"
                         className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px] bg-transparent border-none outline-none flex-1"
                       />
                       <div className="flex items-center justify-center relative shrink-0 w-[35px]">
-                        {/* 백엔드에서 타이머 데이터를 가져와서 표시할 영역 */}
+                        {timeLeft !== null && timeLeft > 0 ? (
+                          <p className="font-normal leading-[1.5] text-[13px] text-[#5f5a58] tracking-[-0.26px] whitespace-nowrap">
+                            {formatTime(timeLeft)}
+                          </p>
+                        ) : timeLeft === 0 ? (
+                          <p className="font-normal leading-[1.5] text-[13px] text-[#b7b3af] tracking-[-0.26px] whitespace-nowrap">
+                            만료
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
+                  {verificationError && (
+                    <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#fd6f22] tracking-[-0.26px]">
+                      {verificationError}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -188,16 +335,25 @@ export default function FindPasswordPage() {
 
           {/* 버튼 및 링크 */}
           <div className="flex flex-col gap-[32px] items-center px-[8px] py-0 relative shrink-0 w-full">
-            <button className="bg-[#c9c1b7] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity">
+            {error && (
+              <div className="w-full p-3 bg-red-50 border border-red-200 rounded-[12px]">
+                <p className="text-[13px] text-red-600">{error}</p>
+              </div>
+            )}
+            <button 
+              onClick={handleVerify}
+              disabled={!verificationCode.trim() || isLoading || isVerified}
+              className={`${verificationCode.trim() && !isVerified ? 'bg-[#443e3c]' : 'bg-[#c9c1b7]'} cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity ${!verificationCode.trim() || isVerified ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
               <p className="font-normal leading-[1.5] relative shrink-0 text-[15px] text-[#f8f6f4]">
-                인증하기
+                {isLoading ? '인증 중...' : isVerified ? '인증 완료' : '인증하기'}
               </p>
             </button>
             <div className="flex gap-[4px] items-start justify-center leading-[1.5] relative shrink-0 text-[13px] tracking-[-0.26px] w-full">
               <p className="font-normal relative shrink-0 text-[#85817e]">
                 아직 계정이 없습니까?
               </p>
-              <Link href="/signup" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
+              <Link href="/register" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
                 회원가입
               </Link>
             </div>

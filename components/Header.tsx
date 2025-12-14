@@ -1,15 +1,77 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import SideMenu from './SideMenu';
 
 export default function Header() {
+  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // localStorage에서 토큰 확인 및 유효성 검증
+    const checkLoginStatus = async () => {
+      const token = localStorage.getItem('token');
+      
+      // 토큰이 없거나 빈 문자열이면 로그아웃 상태
+      if (!token || token.trim() === '') {
+        setIsLoggedIn(false);
+        return;
+      }
+
+      // 토큰 유효성 검증 (JWT 형식 확인 및 만료 여부 확인)
+      try {
+        // JWT는 보통 3개의 부분으로 구성됨 (header.payload.signature)
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+          // 유효하지 않은 토큰 형식
+          localStorage.removeItem('token');
+          setIsLoggedIn(false);
+          return;
+        }
+
+        // 토큰의 payload 부분 디코딩하여 만료 시간 확인
+        const payload = JSON.parse(atob(parts[1]));
+        const currentTime = Math.floor(Date.now() / 1000);
+        
+        if (payload.exp && payload.exp < currentTime) {
+          // 토큰이 만료됨
+          localStorage.removeItem('token');
+          setIsLoggedIn(false);
+          return;
+        }
+
+        // 토큰이 유효함
+        setIsLoggedIn(true);
+      } catch (error) {
+        // 토큰 파싱 오류 (유효하지 않은 토큰)
+        localStorage.removeItem('token');
+        setIsLoggedIn(false);
+      }
+    };
+
+    checkLoginStatus();
+
+    // storage 이벤트 리스너 추가 (다른 탭에서 로그인/로그아웃 시 동기화)
+    const handleStorageChange = () => {
+      checkLoginStatus();
+    };
+
+    // 커스텀 이벤트 리스너 추가 (같은 탭에서 로그인/로그아웃 시 동기화)
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('loginStatusChange', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('loginStatusChange', handleStorageChange);
+    };
+  }, []);
 
   return (
     <>
-      <header className="bg-white w-full h-16 flex items-center justify-between px-4 md:px-6 shadow-sm sticky top-0 z-[60]">
+      <header className="bg-white w-full h-16 flex items-center justify-between px-4 md:px-6 shadow-sm sticky top-0 z-[80]">
         {/* 좌측: 햄버거 메뉴 */}
         <button
           onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -34,7 +96,11 @@ export default function Header() {
         </button>
 
         {/* 중앙: 브랜드 로고 */}
-        <div className="flex-1 flex justify-center">
+        <button
+          onClick={() => router.push('/')}
+          className="flex-1 flex justify-center cursor-pointer hover:opacity-80 transition-opacity"
+          aria-label="홈으로 이동"
+        >
           <div className="relative h-[25px] w-[113px] md:w-[145px]">
             <Image
               src="/images/logo.svg"
@@ -44,12 +110,14 @@ export default function Header() {
               priority
             />
           </div>
-        </div>
+        </button>
 
-        {/* 우측: 로그인 아이콘 */}
+        {/* 우측: 로그인/마이페이지 아이콘 */}
+        {isLoggedIn ? (
         <button
+            onClick={() => router.push('/myPage')}
           className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-          aria-label="로그인"
+            aria-label="마이페이지"
         >
           <svg
             className="w-6 h-6 text-gray-700"
@@ -63,6 +131,25 @@ export default function Header() {
             <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         </button>
+        ) : (
+          <button
+            onClick={() => router.push('/login')}
+            className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+            aria-label="로그인"
+          >
+            <svg
+              className="w-6 h-6 text-gray-700"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+            </svg>
+          </button>
+        )}
       </header>
 
       {/* 사이드 메뉴 */}

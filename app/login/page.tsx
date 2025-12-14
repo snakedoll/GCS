@@ -23,6 +23,44 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // 토큰을 localStorage에 저장
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+          // 커스텀 이벤트 발생하여 Header 컴포넌트에 알림
+          window.dispatchEvent(new Event('loginStatusChange'));
+        }
+        router.push('/');
+      } else {
+        setError(data.error || '로그인에 실패했습니다.');
+      }
+    } catch (error) {
+      setError('로그인 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden flex flex-col">
@@ -91,7 +129,11 @@ export default function LoginPage() {
         </button>
 
         {/* 로고 */}
-        <div className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px]">
+        <button
+          onClick={() => router.push('/')}
+          className="absolute h-[29.608px] left-1/2 top-1/2 -translate-y-1/2 translate-x-[-50%] w-[84px] cursor-pointer hover:opacity-80 transition-opacity z-10"
+          aria-label="홈으로 이동"
+        >
           <div className="absolute inset-[1.48%_82.19%_0_0]">
             <div className="absolute inset-0">
               <img alt="" className="block max-w-none size-full" src={img1} />
@@ -115,7 +157,7 @@ export default function LoginPage() {
               <img alt="" className="block max-w-none size-full" src={img5} />
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 로그인 폼 카드 */}
@@ -192,22 +234,31 @@ export default function LoginPage() {
             {/* 로그인 버튼 및 링크 */}
             <div className="flex flex-col h-[218px] items-center justify-between px-[8px] py-0 relative shrink-0 w-full">
               <div className="flex flex-col gap-[32px] items-center relative shrink-0 w-full">
-                <button className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity">
+                {error && (
+                  <div className="w-full p-3 bg-red-50 border border-red-200 rounded-[12px]">
+                    <p className="text-[13px] text-red-600">{error}</p>
+                  </div>
+                )}
+                <button 
+                  onClick={handleLogin}
+                  disabled={isLoading}
+                  className="bg-[#443e3c] cursor-pointer flex items-center justify-center p-[16px] relative rounded-[12px] shrink-0 w-full hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+                >
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[15px] text-[#f8f6f4]">
-                    로그인
+                    {isLoading ? '로그인 중...' : '로그인'}
                   </p>
                 </button>
                 <div className="flex gap-[4px] items-center leading-[1.5] relative shrink-0 text-[13px] tracking-[-0.26px]">
                   <p className="font-normal relative shrink-0 text-[#85817e]">
                     아직 계정이 없으신가요?
                   </p>
-                  <Link href="/signup" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
+                  <Link href="/register" className="font-bold relative shrink-0 text-[#fd6f22] hover:opacity-80 transition-opacity">
                     회원가입
                   </Link>
                 </div>
               </div>
               <div className="flex gap-[24px] h-[19.44px] items-center relative shrink-0">
-                <Link href="/find-id" className="flex h-full items-start justify-end relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
+                <Link href="/findID" className="flex h-full items-start justify-end relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px]">
                     아이디 찾기
                   </p>
@@ -221,7 +272,7 @@ export default function LoginPage() {
                     </div>
                   </div>
                 </div>
-                <Link href="/find-password" className="flex h-full items-start relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
+                <Link href="/findPassword" className="flex h-full items-start relative shrink-0 w-[74px] hover:opacity-80 transition-opacity">
                   <p className="font-normal leading-[1.5] relative shrink-0 text-[13px] text-[#b7b3af] tracking-[-0.26px]">
                     비밀번호 찾기
                   </p>
