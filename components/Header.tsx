@@ -71,98 +71,13 @@ export default function Header() {
 
   return (
     <>
-      <header className="bg-white w-full h-16 flex items-center justify-between px-4 md:px-6 shadow-sm sticky top-0 z-[80]">
+      <header className="bg-white w-full h-16 grid grid-cols-3 items-center px-4 md:px-6 shadow-sm sticky top-0 z-[80]">
         {/* 좌측: 햄버거 메뉴 */}
-        <button
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-          aria-label="메뉴 열기"
-        >
-          <svg
-            className="w-6 h-6 text-gray-700"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            {isMenuOpen ? (
-              <path d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
-        </button>
-
-        {/* 중앙: 브랜드 로고 */}
-        <button
-          onClick={() => router.push('/')}
-          className="flex-1 flex justify-center cursor-pointer hover:opacity-80 transition-opacity"
-          aria-label="홈으로 이동"
-        >
-          <div className="relative h-[25px] w-[113px] md:w-[145px]">
-            <Image
-              src="/images/logo.svg"
-              alt="Brand Logo"
-              fill
-              className="object-contain"
-              priority
-            />
-          </div>
-        </button>
-
-        {/* 우측: 로그인/마이페이지 아이콘 */}
-        {isLoggedIn ? (
-          <div className="flex items-center gap-2">
-            {/* 로그아웃 아이콘 */}
-            <button
-              onClick={() => {
-                if (confirm('로그아웃 하시겠습니까?')) {
-                  localStorage.removeItem('token');
-                  window.dispatchEvent(new Event('loginStatusChange'));
-                  router.push('/');
-                }
-              }}
-              className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-              aria-label="로그아웃"
-            >
-              <svg
-                className="w-6 h-6 text-gray-700"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-            {/* 마이페이지 아이콘 */}
-            <button
-              onClick={() => router.push('/myPage')}
-              className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-              aria-label="마이페이지"
-            >
-              <svg
-                className="w-6 h-6 text-gray-700"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </button>
-          </div>
-        ) : (
+        <div className="flex justify-start">
           <button
-            onClick={() => router.push('/login')}
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-            aria-label="로그인"
+            aria-label="메뉴 열기"
           >
             <svg
               className="w-6 h-6 text-gray-700"
@@ -173,10 +88,101 @@ export default function Header() {
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+              {isMenuOpen ? (
+                <path d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              )}
             </svg>
           </button>
-        )}
+        </div>
+
+        {/* 중앙: 브랜드 로고 */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => router.push('/')}
+            className="cursor-pointer hover:opacity-80 transition-opacity"
+            aria-label="홈으로 이동"
+          >
+            <div className="relative h-[25px] w-[113px] md:w-[145px]">
+              <Image
+                src="/images/logo.svg"
+                alt="Brand Logo"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+          </button>
+        </div>
+
+        {/* 우측: 로그인/마이페이지 아이콘 */}
+        <div className="flex justify-end">
+          {isLoggedIn ? (
+            <div className="flex items-center gap-2">
+              {/* 로그아웃 아이콘 */}
+              <button
+                onClick={() => {
+                  if (confirm('로그아웃 하시겠습니까?')) {
+                    localStorage.removeItem('token');
+                    window.dispatchEvent(new Event('loginStatusChange'));
+                    router.push('/');
+                  }
+                }}
+                className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label="로그아웃"
+              >
+                <svg
+                  className="w-6 h-6 text-gray-700"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+              {/* 마이페이지 아이콘 */}
+              <button
+                onClick={() => router.push('/myPage')}
+                className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label="마이페이지"
+              >
+                <svg
+                  className="w-6 h-6 text-gray-700"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => router.push('/login')}
+              className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+              aria-label="로그인"
+            >
+              <svg
+                className="w-6 h-6 text-gray-700"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+              </svg>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* 사이드 메뉴 */}
