@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
         memberType: true,
         studentId: true,
         major: true,
+        hasSellingPermission: true,
         createdAt: true,
         _count: {
           select: {
@@ -84,9 +85,6 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        // 판매 권한 (팀 멤버인지 확인)
-        const hasTeamMembership = user._count.teamMemberships > 0;
-
         return {
           id: user.id,
           email: user.email,
@@ -97,7 +95,7 @@ export async function GET(request: NextRequest) {
           studentId: user.studentId,
           major: user.major,
           totalPurchaseAmount: totalPurchase._sum.totalAmount || 0,
-          hasSellingPermission: hasTeamMembership,
+          hasSellingPermission: user.hasSellingPermission || false,
           createdAt: user.createdAt,
         };
       })

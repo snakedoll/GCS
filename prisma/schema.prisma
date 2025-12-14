@@ -22,6 +22,7 @@ model User {
   major       String?  // 전공 회원일 경우만
   profileImage String? // 프로필 이미지 URL
   emailVerified Boolean @default(false)
+  hasSellingPermission Boolean @default(false) // 판매 권한
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   

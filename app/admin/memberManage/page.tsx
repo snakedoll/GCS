@@ -60,6 +60,8 @@ function MemberManageContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [memberFilterOpen, setMemberFilterOpen] = useState(false);
   const memberFilterRef = useRef<HTMLDivElement>(null);
+  const [editingMemberType, setEditingMemberType] = useState<{ userId: string; isOpen: boolean }>({ userId: '', isOpen: false });
+  const memberTypeDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -76,16 +78,25 @@ function MemberManageContent() {
       if (memberFilterRef.current && !memberFilterRef.current.contains(event.target as Node)) {
         setMemberFilterOpen(false);
       }
+      // 회원유형 드롭다운 닫기
+      if (editingMemberType.isOpen) {
+        const clickedInside = Object.values(memberTypeDropdownRefs.current).some(
+          (ref) => ref && ref.contains(event.target as Node)
+        );
+        if (!clickedInside) {
+          setEditingMemberType({ userId: '', isOpen: false });
+        }
+      }
     };
 
-    if (memberFilterOpen) {
+    if (memberFilterOpen || editingMemberType.isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [memberFilterOpen]);
+  }, [memberFilterOpen, editingMemberType.isOpen]);
 
   // 회원 목록 로드
   useEffect(() => {
@@ -185,6 +196,71 @@ function MemberManageContent() {
       'admin': '관리자',
     };
     return map[memberType] || memberType;
+  };
+
+  const handleMemberTypeUpdate = async (userId: string, newMemberType: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          memberType: newMemberType,
+        }),
+      });
+
+      if (response.ok) {
+        // 목록 새로고침
+        loadUsers();
+        setEditingMemberType({ userId: '', isOpen: false });
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || '회원유형 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('회원유형 변경 오류:', error);
+      alert('회원유형 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleSellingPermissionToggle = async (userId: string, newValue: boolean) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hasSellingPermission: newValue,
+        }),
+      });
+
+      if (response.ok) {
+        // 목록 새로고침
+        loadUsers();
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || '판매권한 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('판매권한 변경 오류:', error);
+      alert('판매권한 변경 중 오류가 발생했습니다.');
+    }
   };
 
   const memberFilters = ['전체', '일반회원', '전공회원', '관리자'];
@@ -407,9 +483,36 @@ function MemberManageContent() {
                           </span>
                         </td>
                         <td className="px-[8px] md:px-[16px] py-[8px] md:py-[12px]">
-                          <span className="font-normal text-[10px] md:text-[13px] text-[#1a1918] tracking-[-0.2px] md:tracking-[-0.26px] whitespace-nowrap">
-                            {getMemberTypeLabel(user.memberType)}
-                          </span>
+                          <div className="relative" ref={(el) => { memberTypeDropdownRefs.current[user.id] = el; }}>
+                            <button
+                              onClick={() => setEditingMemberType({ userId: user.id, isOpen: editingMemberType.userId === user.id ? !editingMemberType.isOpen : true })}
+                              className="font-normal text-[10px] md:text-[13px] text-[#1a1918] tracking-[-0.2px] md:tracking-[-0.26px] whitespace-nowrap hover:underline"
+                            >
+                              {getMemberTypeLabel(user.memberType)} ▼
+                            </button>
+                            {editingMemberType.userId === user.id && editingMemberType.isOpen && (
+                              <div className="absolute top-full left-0 mt-[4px] bg-white border border-[#eeebe6] rounded-[8px] shadow-lg z-50 min-w-[120px]">
+                                {['일반회원', '전공회원', '관리자'].map((type) => {
+                                  const typeValue = type === '일반회원' ? 'general' : type === '전공회원' ? 'major' : 'admin';
+                                  return (
+                                    <button
+                                      key={type}
+                                      onClick={() => handleMemberTypeUpdate(user.id, typeValue)}
+                                      className={`w-full px-[12px] py-[8px] text-left hover:bg-[#f8f6f4] ${
+                                        user.memberType === typeValue ? 'bg-[#fff5f0] font-medium' : ''
+                                      } ${
+                                        type !== '관리자' ? 'border-b border-[#eeebe6]' : ''
+                                      }`}
+                                    >
+                                      <p className="font-normal text-[12px] text-[#1a1918]">
+                                        {type}
+                                      </p>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-[8px] md:px-[16px] py-[8px] md:py-[12px]">
                           <span className="font-normal text-[10px] md:text-[13px] text-[#85817e] tracking-[-0.2px] md:tracking-[-0.26px] whitespace-nowrap">
@@ -427,15 +530,16 @@ function MemberManageContent() {
                           </span>
                         </td>
                         <td className="px-[8px] md:px-[16px] py-[8px] md:py-[12px]">
-                          {user.hasSellingPermission ? (
-                            <button className="bg-[#4ade80] text-white px-[6px] md:px-[8px] py-[3px] md:py-[4px] rounded-[4px] font-normal text-[9px] md:text-[11px] tracking-[-0.18px] md:tracking-[-0.22px] hover:opacity-80 transition-opacity whitespace-nowrap">
-                              활성
-                            </button>
-                          ) : (
-                            <button className="bg-[#d1d5db] text-white px-[6px] md:px-[8px] py-[3px] md:py-[4px] rounded-[4px] font-normal text-[9px] md:text-[11px] tracking-[-0.18px] md:tracking-[-0.22px] hover:opacity-80 transition-opacity whitespace-nowrap">
-                              비활성
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleSellingPermissionToggle(user.id, !user.hasSellingPermission)}
+                            className={`${
+                              user.hasSellingPermission 
+                                ? 'bg-[#4ade80]' 
+                                : 'bg-[#d1d5db]'
+                            } text-white px-[6px] md:px-[8px] py-[3px] md:py-[4px] rounded-[4px] font-normal text-[9px] md:text-[11px] tracking-[-0.18px] md:tracking-[-0.22px] hover:opacity-80 transition-opacity whitespace-nowrap`}
+                          >
+                            {user.hasSellingPermission ? '활성' : '비활성'}
+                          </button>
                         </td>
                       </tr>
                     ))}
