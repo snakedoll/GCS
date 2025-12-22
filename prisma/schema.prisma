@@ -507,3 +507,18 @@ model AdminLog {
   @@index([createdAt])
 }
 
+// ============================================
+// 정적 페이지 콘텐츠
+// ============================================
+
+model PageContent {
+  id          String   @id @default(cuid())
+  page        String   @unique // "about-intro" | "about-major" | etc.
+  title       String?
+  content     Json     // 한국어/영어 등 다국어 콘텐츠를 JSON으로 저장
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([page])
+}
+
